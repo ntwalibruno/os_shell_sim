@@ -226,7 +226,7 @@ class Shell:
                 return
                 
             filename = args[0]
-            filepath = os.path.join(self.cwd, filename) if not os.path.isabs(filename) else filename
+            filepath = os.path.join(self.cwd, filename)
                 
             has_perm, error = check_file_permission(
                 filepath,
@@ -247,7 +247,7 @@ class Shell:
                 return
                 
             filename = args[0]
-            filepath = os.path.join(self.cwd, filename) if not os.path.isabs(filename) else filename
+            filepath = os.path.join(self.cwd, filename)
             parent_dir = os.path.dirname(filepath) or self.cwd
                 
             has_perm, error = check_file_permission(
@@ -263,17 +263,13 @@ class Shell:
                 
             from .commands.file_commands import touch
             touch(self.cwd, args)
-            
-            # Set default permissions for new file
-            self.permission_manager.set_owner(filepath, self.user_manager.current_user.username)
-            self.permission_manager.set_permissions(filepath, FilePermission.READ | FilePermission.WRITE)
         elif command == "rm":
             if not args:
                 print("Error: rm requires a filename")
                 return
                 
             filename = args[0]
-            filepath = os.path.join(self.cwd, filename) if not os.path.isabs(filename) else filename
+            filepath = os.path.join(self.cwd, filename)
                 
             has_perm, error = check_file_permission(
                 filepath,
@@ -291,11 +287,10 @@ class Shell:
         
         # System commands
         elif command == "echo":
-            from .commands.system_commands import echo
             if input_data:
-                # If we have input data from a pipe, echo it instead
-                echo([input_data])
+                print(input_data, end='')
             else:
+                from .commands.system_commands import echo
                 echo(args)
         elif command == "clear":
             from .commands.system_commands import clear_screen
@@ -317,11 +312,8 @@ class Shell:
             from .commands.system_commands import kill_process
             kill_process(args)
         elif command == "history":
-            if not self.cmd_history:
-                print("No commands in history")
-                return
-            for i, cmd in enumerate(self.cmd_history, 1):
-                print(f"{i}: {cmd}")
+            for i, cmd in enumerate(self.cmd_history):
+                print(f"{i+1}: {cmd}")
             
         # Scheduling simulation commands
         elif command == "roundrobin":
@@ -348,81 +340,44 @@ class Shell:
             self.running = False
             print("Exiting shell...")
         elif command == "help":
-            # Show help message with available commands
-            print("Available commands:")
-            print("  cd [dir]           - Change directory")
-            print("  pwd                - Print working directory")
-            print("  ls [dir]           - List directory contents")
-            print("  cat <file>         - Display file contents")
-            print("  touch <file>       - Create a new file")
-            print("  mkdir <dir>        - Create a new directory")
-            print("  rm <file>          - Remove a file")
-            print("  rmdir <dir>        - Remove a directory")
-            print("  echo <text>        - Print text to standard output")
-            print("  grep <pattern> [file] - Search for a pattern in a file or stdin")
-            print("  sort [file]        - Sort lines in a file or stdin")
-            print("  | (pipe)           - Chain commands with pipe operator")
-            print("  history            - Show command history")
-            print("  clear              - Clear the screen")
-            print("  chmod <perm> <file> - Change file permissions (e.g., chmod rw file.txt)")
-            print("\nUser management commands:")
-            print("  useradd <username> [level] - Add a new user (levels: admin, standard, user)")
-            print("  userdel <username> - Delete a user")
-            print("  passwd [username]  - Change password")
-            print("  whoami             - Display current user")
-            print("  users              - List all users (admin only)")
-            print("  logout             - Log out current user")
-            print("\nProcess simulation commands:")
-            print("  roundrobin [n] [q] - Simulate round robin scheduling")
-            print("  priority [n]       - Simulate priority scheduling")
-            print("  paging [algo] [n] [size] - Simulate memory paging")
-            print("  philosophers [n] [time] - Simulate dining philosophers problem")
-            print("\nSystem commands:")
-            print("  sleep <seconds>    - Pause execution for the specified time")
-            print("  exit               - Exit the shell")
-            print("  help               - Show this help message")
-        else:
+            self.show_help()
+        elif command:
             print(f"Command not implemented: {command}")
     
     # User management command implementations
     def cmd_useradd(self, args):
-        """Add a new user to the system"""
-        if self.user_manager.current_user.permission_level != PermissionLevel.ADMIN:
+        """Add a new user"""
+        current_user = self.user_manager.current_user
+        
+        if current_user.permission_level != PermissionLevel.ADMIN:
             print("Error: Only administrators can add users")
             return
             
-        if not args:
-            print("Usage: useradd <username>")
+        if len(args) < 2:
+            print("Usage: useradd <username> <permission_level>")
+            print("Permission levels: USER, STANDARD, ADMIN")
             return
             
         username = args[0]
-        
-        # Get permission level
-        if len(args) > 1 and args[1] in ["admin", "standard", "user"]:
-            level_str = args[1].upper()
-            try:
-                level = PermissionLevel[level_str]
-            except KeyError:
-                level = PermissionLevel.USER
-        else:
-            level = PermissionLevel.USER
-        
-        # Get password
-        password = getpass.getpass(f"Enter password for new user {username}: ")
-        confirm = getpass.getpass("Confirm password: ")
-        
-        if password != confirm:
-            print("Error: Passwords do not match")
+        try:
+            permission_level = PermissionLevel[args[1].upper()]
+        except KeyError:
+            print(f"Invalid permission level: {args[1]}")
+            print("Valid levels are: USER, STANDARD, ADMIN")
             return
             
-        if self.user_manager.add_user(username, password, level):
-            print(f"User {username} added successfully")
+        password = getpass.getpass(f"Enter password for new user '{username}': ")
+        
+        if self.user_manager.add_user(username, password, permission_level):
+            print(f"User '{username}' added with {permission_level.name} permissions")
         else:
-            print(f"Failed to add user {username}")
-
+            print(f"Failed to add user '{username}'")
+    
     def cmd_userdel(self, args):
-        """Delete a user from the system"""
-        if self.user_manager.current_user.permission_level != PermissionLevel.ADMIN:
+        """Delete a user"""
+        current_user = self.user_manager.current_user
+        
+        if current_user.permission_level != PermissionLevel.ADMIN:
             print("Error: Only administrators can delete users")
             return
             
@@ -432,108 +387,113 @@ class Shell:
             
         username = args[0]
         
-        # Don't allow deleting yourself
-        if username == self.user_manager.current_user.username:
+        if username == current_user.username:
             print("Error: Cannot delete your own account")
             return
             
-        if self.user_manager.delete_user(username):
-            print(f"User {username} deleted successfully")
+        if self.user_manager.remove_user(username):
+            print(f"User '{username}' deleted")
         else:
-            print(f"Failed to delete user {username}")
-
+            print(f"Failed to delete user '{username}'")
+    
     def cmd_passwd(self, args):
-        """Change user password"""
+        """Change password"""
+        current_user = self.user_manager.current_user
+        
         if args:
-            username = args[0]
-            # Only admins can change other users' passwords
-            if username != self.user_manager.current_user.username and \
-               self.user_manager.current_user.permission_level != PermissionLevel.ADMIN:
+            # Changing another user's password requires admin
+            if current_user.permission_level != PermissionLevel.ADMIN:
                 print("Error: Only administrators can change other users' passwords")
                 return
+                
+            username = args[0]
         else:
-            username = self.user_manager.current_user.username
+            # Changing own password
+            username = current_user.username
             
-        current_password = None
-        if username == self.user_manager.current_user.username:
-            # User changing their own password must provide current password
-            current_password = getpass.getpass("Current password: ")
-            
-        new_password = getpass.getpass("New password: ")
+        new_password = getpass.getpass("Enter new password: ")
         confirm = getpass.getpass("Confirm new password: ")
         
         if new_password != confirm:
-            print("Error: Passwords do not match")
+            print("Passwords do not match")
             return
             
-        if self.user_manager.change_password(username, new_password, current_password):
-            print(f"Password for {username} changed successfully")
+        if self.user_manager.change_password(username, new_password):
+            print(f"Password changed for user '{username}'")
         else:
-            print("Failed to change password")
-
+            print(f"Failed to change password for '{username}'")
+    
     def cmd_whoami(self):
-        """Display current user information"""
-        user = self.user_manager.current_user
-        print(f"Current user: {user.username}")
-        print(f"Permission level: {user.permission_level.name}")
-
+        """Show current user information"""
+        current_user = self.user_manager.current_user
+        print(f"Username: {current_user.username}")
+        print(f"Permission level: {current_user.permission_level.name}")
+    
     def cmd_logout(self):
         """Log out the current user"""
-        print(f"Logging out user: {self.user_manager.current_user.username}")
-        if self.user_manager.logout():
-            print("You have been logged out")
-            # After logout, return to login prompt
-            self.start()
-
+        self.user_manager.logout()
+        print("Logged out")
+        
+        # Prompt for new login
+        if not self.user_manager.login():
+            self.running = False
+            print("Exiting shell...")
+    
     def cmd_users(self):
-        """List all users in the system"""
-        if self.user_manager.current_user.permission_level != PermissionLevel.ADMIN:
-            print("Error: Only administrators can list users")
+        """List all users"""
+        current_user = self.user_manager.current_user
+        
+        if current_user.permission_level != PermissionLevel.ADMIN:
+            print("Error: Only administrators can list all users")
             return
             
-        users = self.user_manager.list_users()
-        print("Users in the system:")
+        users = self.user_manager.get_users_list()
+        print("Users:")
         for user in users:
-            print(f"- {user.username} ({user.permission_level.name})")
-
+            print(f"  {user['username']} ({user['permission_level']})")
+    
     def cmd_chmod(self, args):
         """Change file permissions"""
-        if len(args) < 2:
-            print("Usage: chmod <permissions> <file>")
-            print("Example: chmod rw file.txt")
+        current_user = self.user_manager.current_user
+        
+        if current_user.permission_level != PermissionLevel.ADMIN:
+            print("Error: Only administrators can change file permissions")
             return
             
-        permissions_str = args[0]
-        filepath = args[1]
+        if len(args) < 3:
+            print("Usage: chmod <username> <r|w|x|rwx> <filepath>")
+            return
+            
+        username = args[0]
+        perm_str = args[1].lower()
+        filepath = args[2]
         
-        # Handle relative vs absolute paths
+        # Convert relative path to absolute
         if not os.path.isabs(filepath):
             filepath = os.path.join(self.cwd, filepath)
             
-        # Only admins or file owners can change permissions
-        if not self.permission_manager.can_change_permissions(
-            filepath, 
-            self.user_manager.current_user
-        ):
-            print("Error: Permission denied. Only the file owner or an administrator can modify permissions.")
+        if not os.path.exists(filepath):
+            print(f"Error: File not found: {filepath}")
             return
             
-        # Parse permissions string (simple format: r=read, w=write, x=execute)
+        # Parse permission string
         permissions = FilePermission.NONE
-        if 'r' in permissions_str:
+        if 'r' in perm_str:
             permissions |= FilePermission.READ
-        if 'w' in permissions_str:
+        if 'w' in perm_str:
             permissions |= FilePermission.WRITE
-        if 'x' in permissions_str:
+        if 'x' in perm_str:
             permissions |= FilePermission.EXECUTE
             
-        # Apply permissions
-        success = self.permission_manager.set_permissions(filepath, permissions)
-        if success:
-            print(f"Changed permissions for {filepath}")
+        if permissions == FilePermission.NONE:
+            print("Error: Invalid permissions. Use r, w, x or combinations")
+            return
+            
+        if self.permission_manager.set_permissions(filepath, username, permissions):
+            print(f"Changed permissions for '{username}' on '{filepath}'")
         else:
-            print(f"Failed to change permissions for {filepath}")
-
+            print(f"Failed to change permissions")
+    
     def show_help(self):
         """Display help information"""
         print("\nAvailable commands:")
@@ -578,95 +538,85 @@ class Shell:
         print("  command1 | command2 | command3  - Chain commands with pipes")
     
     def cmd_grep(self, args, input_data=None):
-        """Search for a pattern in a file or stdin"""
+        """
+        Filter input lines containing pattern
+        
+        Args:
+            args: Command arguments [pattern, filename?]
+            input_data: Input from previous command in pipeline
+        """
         if not args:
-            print("Usage: grep <pattern> [file]")
+            print("Error: grep requires a pattern")
             return
-            
+        
         pattern = args[0]
         
-        if len(args) > 1 and input_data is None:
-            # Read from file
-            filename = args[1]
-            filepath = os.path.join(self.cwd, filename) if not os.path.isabs(filename) else filename
-            
-            # Check if user has permission to read the file
-            has_perm, error = check_file_permission(
-                filepath,
-                self.user_manager.current_user,
-                self.permission_manager,
-                FilePermission.READ
-            )
-            
-            if not has_perm:
-                print(error)
-                return
-                
-            try:
-                with open(filepath, 'r') as f:
-                    content = f.readlines()
-            except FileNotFoundError:
-                print(f"Error: File not found: {filename}")
-                return
-            except PermissionError:
-                print(f"Error: Permission denied for file: {filename}")
-                return
-            except Exception as e:
-                handle_error(e)
-                return
-        else:
-            # Read from stdin or piped input
-            content = input_data.splitlines() if input_data else sys.stdin.readlines()
+        # If we have input from a pipe
+        if input_data:
+            lines = input_data.splitlines()
+            for line in lines:
+                if pattern in line:
+                    print(line)
+            return
         
-        # Search for pattern in content
-        for line in content:
-            if pattern in line:
-                print(line.rstrip())
-
+        # Otherwise read from a file
+        if len(args) < 2:
+            print("Error: grep requires a filename when not in a pipeline")
+            return
+        
+        filename = args[1]
+        
+        # Handle relative paths
+        if not os.path.isabs(filename):
+            filename = os.path.join(self.cwd, filename)
+        
+        try:
+            with open(filename, 'r') as file:
+                for line in file:
+                    if pattern in line:
+                        print(line.rstrip())
+        except FileNotFoundError:
+            print(f"Error: File not found: {filename}")
+        except PermissionError:
+            print(f"Error: Permission denied: {filename}")
+        except Exception as e:
+            handle_error(e)
+    
     def cmd_sort(self, args, input_data=None):
-        """Sort lines in a file or stdin"""
-        reverse = False
-        if args and args[0] == '-r':
-            reverse = True
-            args = args[1:]
+        """
+        Sort lines of text
         
-        if args and input_data is None:
-            # Read from file
-            filename = args[0]
-            filepath = os.path.join(self.cwd, filename) if not os.path.isabs(filename) else filename
-            
-            # Check if user has permission to read the file
-            has_perm, error = check_file_permission(
-                filepath,
-                self.user_manager.current_user,
-                self.permission_manager,
-                FilePermission.READ
-            )
-            
-            if not has_perm:
-                print(error)
-                return
-                
-            try:
-                with open(filepath, 'r') as f:
-                    content = f.readlines()
-            except FileNotFoundError:
-                print(f"Error: File not found: {filename}")
-                return
-            except PermissionError:
-                print(f"Error: Permission denied for file: {filename}")
-                return
-            except Exception as e:
-                handle_error(e)
-                return
-        else:
-            # Read from stdin or piped input
-            content = input_data.splitlines() if input_data else sys.stdin.readlines()
+        Args:
+            args: Command arguments [filename?]
+            input_data: Input from previous command in pipeline
+        """
+        # If we have input from a pipe
+        if input_data:
+            lines = input_data.splitlines()
+            for line in sorted(lines):
+                print(line)
+            return
         
-        # Sort content
-        sorted_content = sorted(content, reverse=reverse)
+        # Otherwise read from a file
+        if not args:
+            print("Error: sort requires a filename when not in a pipeline")
+            return
         
-        # Print sorted content
-        for line in sorted_content:
-            print(line.rstrip())
+        filename = args[0]
+        
+        # Handle relative paths
+        if not os.path.isabs(filename):
+            filename = os.path.join(self.cwd, filename)
+        
+        try:
+            with open(filename, 'r') as file:
+                lines = file.readlines()
+                for line in sorted(lines):
+                    print(line.rstrip())
+        except FileNotFoundError:
+            print(f"Error: File not found: {filename}")
+        except PermissionError:
+            print(f"Error: Permission denied: {filename}")
+        except Exception as e:
+            handle_error(e)
 
