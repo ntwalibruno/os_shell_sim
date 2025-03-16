@@ -123,6 +123,7 @@ class UserManager:
         
         while attempts < max_attempts:
             print("\n=== Shell Simulator Login ===")
+            print("Default <admin:admin> 🔐")
             username = input("Username: ")
             password = getpass.getpass("Password: ")
             
